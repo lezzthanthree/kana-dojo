@@ -514,7 +514,7 @@ const WelcomeModal = () => {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           className={clsx(
-            'w-full md:w-4/5 max-h-[85vh] overflow-y-auto',
+            'w-full md:w-4/5 lg:w-3/5 max-h-[85vh] overflow-y-auto',
             'rounded-2xl bg-[var(--card-color)] m-3',
             'shadow-2xl shadow-black/20',
             cardBorderStyles

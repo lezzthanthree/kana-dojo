@@ -6,13 +6,21 @@ import {
   getDaysInPeriod,
   hasVisit,
   getDayOfWeek,
-  groupDatesByMonth,
-  getMonthName
+  getMonthName,
+  formatDate
 } from '../lib/streakCalculations';
 
 interface StreakGridProps {
   visits: string[];
   period: TimePeriod;
+}
+
+/**
+ * Check if a date string is in the future (after today)
+ */
+function isFutureDate(dateStr: string): boolean {
+  const today = formatDate(new Date());
+  return dateStr > today;
 }
 
 // Monday-based day labels
@@ -39,15 +47,17 @@ const FULL_MONTH_NAMES = [
 function DayCell({
   date,
   isVisited,
+  isFuture = false,
   size = 'sm'
 }: {
   date: string;
   isVisited: boolean;
+  isFuture?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }) {
   const sizeClasses = {
-    sm: 'w-[10px] h-[10px]',
-    md: 'w-4 h-4',
+    sm: 'w-3 h-3',
+    md: 'w-5 h-5',
     lg: 'w-6 h-6'
   };
 
@@ -56,19 +66,45 @@ function DayCell({
       className={clsx(
         'rounded-[3px] transition-colors cursor-default',
         sizeClasses[size],
-        isVisited
+        isFuture
+          ? 'border border-[var(--border-color)] opacity-40 bg-transparent'
+          : isVisited
           ? 'bg-[var(--main-color)]'
           : 'bg-[var(--border-color)] opacity-25'
       )}
-      title={`${date}${isVisited ? ' ✓' : ''}`}
+      title={`${date}${isFuture ? ' (future)' : isVisited ? ' ✓' : ''}`}
     />
   );
+}
+
+/**
+ * Get all days of the current week (Mon-Sun), including future days
+ */
+function getFullWeekDays(days: string[]): (string | null)[] {
+  // Get the start of the week (Monday) from the first day in days
+  if (days.length === 0) return new Array(7).fill(null);
+
+  const firstDay = new Date(days[0]);
+  const dayOfWeek = firstDay.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(firstDay);
+  monday.setDate(firstDay.getDate() + mondayOffset);
+
+  const weekDays: (string | null)[] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    weekDays.push(formatDate(date));
+  }
+  return weekDays;
 }
 
 /**
  * Week view - horizontal row of 7 days (Mon-Sun)
  */
 function WeekGrid({ visits, days }: { visits: string[]; days: string[] }) {
+  const fullWeekDays = getFullWeekDays(days);
+
   return (
     <div className='flex flex-col gap-3'>
       {/* Day labels */}
@@ -84,11 +120,12 @@ function WeekGrid({ visits, days }: { visits: string[]; days: string[] }) {
       </div>
       {/* Day cells */}
       <div className='flex gap-2 justify-center'>
-        {DAY_LABELS.map((_, dayIndex) => {
-          const dayDate = days.find(d => getDayOfWeek(d) === dayIndex);
+        {fullWeekDays.map((dayDate, dayIndex) => {
           if (!dayDate) {
             return <div key={dayIndex} className='w-10 h-10' />;
           }
+          const isFuture = isFutureDate(dayDate);
+          const isVisited = hasVisit(visits, dayDate);
           return (
             <div
               key={dayDate}
@@ -97,11 +134,15 @@ function WeekGrid({ visits, days }: { visits: string[]; days: string[] }) {
               <div
                 className={clsx(
                   'w-8 h-8 rounded-md transition-colors',
-                  hasVisit(visits, dayDate)
+                  isFuture
+                    ? 'border border-[var(--border-color)] opacity-40 bg-transparent'
+                    : isVisited
                     ? 'bg-[var(--main-color)]'
                     : 'bg-[var(--border-color)] opacity-25'
                 )}
-                title={`${dayDate}${hasVisit(visits, dayDate) ? ' ✓' : ''}`}
+                title={`${dayDate}${
+                  isFuture ? ' (future)' : isVisited ? ' ✓' : ''
+                }`}
               />
             </div>
           );
@@ -112,19 +153,41 @@ function WeekGrid({ visits, days }: { visits: string[]; days: string[] }) {
 }
 
 /**
+ * Get all days of the current month, including future days
+ */
+function getFullMonthDays(): string[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  // Get the last day of the month
+  const lastDay = new Date(year, month + 1, 0).getDate();
+
+  const monthDays: string[] = [];
+  for (let day = 1; day <= lastDay; day++) {
+    const date = new Date(year, month, day);
+    monthDays.push(formatDate(date));
+  }
+  return monthDays;
+}
+
+/**
  * Month view - GitHub-style grid with weeks as columns
  * Each column is a week, rows are days of week (Mon-Sun)
  */
-function MonthGrid({ visits, days }: { visits: string[]; days: string[] }) {
+function MonthGrid({ visits }: { visits: string[]; days: string[] }) {
   // Get current month name
   const currentDate = new Date();
   const monthName = FULL_MONTH_NAMES[currentDate.getMonth()];
+
+  // Get all days of the month (including future)
+  const allMonthDays = getFullMonthDays();
 
   // Group days into weeks (columns) - Monday-based
   const weeks: (string | null)[][] = [];
   let currentWeek: (string | null)[] = new Array(7).fill(null);
 
-  for (const day of days) {
+  for (const day of allMonthDays) {
     const dayOfWeek = getDayOfWeek(day); // 0 = Monday, 6 = Sunday
     currentWeek[dayOfWeek] = day;
 
@@ -153,7 +216,7 @@ function MonthGrid({ visits, days }: { visits: string[]; days: string[] }) {
           {DAY_LABELS.map(label => (
             <div
               key={label}
-              className='h-4 w-8 text-[11px] text-[var(--secondary-color)] flex items-center justify-end pr-2'
+              className='h-5 w-8 text-[11px] text-[var(--secondary-color)] flex items-center justify-end pr-2'
             >
               {label}
             </div>
@@ -170,10 +233,11 @@ function MonthGrid({ visits, days }: { visits: string[]; days: string[] }) {
                     <DayCell
                       date={day}
                       isVisited={hasVisit(visits, day)}
+                      isFuture={isFutureDate(day)}
                       size='md'
                     />
                   ) : (
-                    <div className='w-4 h-4' />
+                    <div className='w-5 h-5' />
                   )}
                 </div>
               ))}
@@ -186,41 +250,78 @@ function MonthGrid({ visits, days }: { visits: string[]; days: string[] }) {
 }
 
 /**
- * Year view - GitHub-style grid with all months, expanded vertically
+ * Get all days of the current year (Jan 1 to Dec 31), including future days
  */
-function YearGrid({ visits, days }: { visits: string[]; days: string[] }) {
+function getFullYearDays(): string[] {
+  const year = new Date().getFullYear();
+  const yearDays: string[] = [];
+
+  // Start from Jan 1
+  const startDate = new Date(year, 0, 1);
+  // End at Dec 31
+  const endDate = new Date(year, 11, 31);
+
+  const currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    yearDays.push(formatDate(currentDate));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return yearDays;
+}
+
+/**
+ * Year view - GitHub-style continuous grid (no splits between months)
+ * Weeks are columns, days of week are rows
+ */
+function YearGrid({ visits }: { visits: string[]; days: string[] }) {
   const currentYear = new Date().getFullYear();
-  const monthGroups = groupDatesByMonth(days);
-  const sortedMonths = Object.keys(monthGroups).sort();
 
-  // Build weeks for the entire year - Monday-based
-  const allWeeks: { month: string; days: (string | null)[] }[] = [];
+  // Get ALL days of the year (Jan 1 - Dec 31)
+  const allYearDays = getFullYearDays();
 
-  for (const monthKey of sortedMonths) {
-    const monthDays = monthGroups[monthKey];
-    let currentWeek: (string | null)[] = new Array(7).fill(null);
-    let isFirstWeekOfMonth = true;
+  // Build continuous weeks for the entire year - GitHub style
+  // Each week is a column, start from the first week containing Jan 1
+  const allWeeks: (string | null)[][] = [];
+  let currentWeek: (string | null)[] = new Array(7).fill(null);
 
-    for (const day of monthDays) {
-      const dayOfWeek = getDayOfWeek(day); // 0 = Monday, 6 = Sunday
-      currentWeek[dayOfWeek] = day;
+  // Find what day of the week Jan 1 falls on
+  const jan1 = new Date(currentYear, 0, 1);
+  const jan1DayOfWeek = jan1.getDay() === 0 ? 6 : jan1.getDay() - 1; // Monday = 0
 
-      // If Sunday (6), start a new week
-      if (dayOfWeek === 6) {
-        allWeeks.push({
-          month: isFirstWeekOfMonth ? monthKey : '',
-          days: currentWeek
-        });
-        currentWeek = new Array(7).fill(null);
-        isFirstWeekOfMonth = false;
-      }
+  // Fill in days before Jan 1 in the first week with nulls (already done)
+  for (const day of allYearDays) {
+    const dayOfWeek = getDayOfWeek(day); // 0 = Monday, 6 = Sunday
+    currentWeek[dayOfWeek] = day;
+
+    // If Sunday (6), push week and start new
+    if (dayOfWeek === 6) {
+      allWeeks.push(currentWeek);
+      currentWeek = new Array(7).fill(null);
     }
+  }
 
-    if (currentWeek.some(d => d !== null)) {
-      allWeeks.push({
-        month: isFirstWeekOfMonth ? monthKey : '',
-        days: currentWeek
-      });
+  // Push the last partial week if it has any days
+  if (currentWeek.some(d => d !== null)) {
+    allWeeks.push(currentWeek);
+  }
+
+  // Calculate month labels - show label at the first week of each month
+  const monthLabels: string[] = [];
+  let lastMonth = '';
+  for (const week of allWeeks) {
+    // Find the first non-null day in this week
+    const firstDayInWeek = week.find(d => d !== null);
+    if (firstDayInWeek) {
+      const monthKey = firstDayInWeek.substring(0, 7); // YYYY-MM
+      if (monthKey !== lastMonth) {
+        monthLabels.push(getMonthName(monthKey));
+        lastMonth = monthKey;
+      } else {
+        monthLabels.push('');
+      }
+    } else {
+      monthLabels.push('');
     }
   }
 
@@ -237,11 +338,11 @@ function YearGrid({ visits, days }: { visits: string[]; days: string[] }) {
           {/* Spacer for month labels row */}
           <div className='h-4' />
           {/* Day labels */}
-          <div className='flex flex-col gap-[3px]'>
+          <div className='flex flex-col gap-[2px]'>
             {DAY_LABELS.map(label => (
               <div
                 key={label}
-                className='h-[10px] w-8 text-[10px] text-[var(--secondary-color)] flex items-center justify-end pr-2'
+                className='h-3 w-8 text-[10px] text-[var(--secondary-color)] flex items-center justify-end pr-2'
               >
                 {label}
               </div>
@@ -251,35 +352,36 @@ function YearGrid({ visits, days }: { visits: string[]; days: string[] }) {
 
         {/* Grid container - horizontal scroll on small screens */}
         <div className='flex-1 overflow-x-auto pb-2'>
-          <div className='flex flex-col gap-[3px] min-w-max'>
+          <div className='flex flex-col gap-[2px] min-w-max'>
             {/* Month labels */}
-            <div className='flex gap-[3px] h-4 items-end'>
-              {allWeeks.map((week, i) => (
+            <div className='flex gap-[2px] h-4 items-end'>
+              {monthLabels.map((label, i) => (
                 <div
                   key={i}
-                  className='w-[10px] text-[10px] text-[var(--secondary-color)] whitespace-nowrap'
+                  className='w-3 text-[10px] text-[var(--secondary-color)] whitespace-nowrap'
                 >
-                  {week.month ? getMonthName(week.month) : ''}
+                  {label}
                 </div>
               ))}
             </div>
 
             {/* Grid rows - one row per day of week */}
-            <div className='flex flex-col gap-[3px]'>
+            <div className='flex flex-col gap-[2px]'>
               {DAY_LABELS.map((_, dayIndex) => (
-                <div key={dayIndex} className='flex gap-[3px]'>
+                <div key={dayIndex} className='flex gap-[2px]'>
                   {allWeeks.map((week, weekIndex) => {
-                    const day = week.days[dayIndex];
+                    const day = week[dayIndex];
                     return (
                       <div key={weekIndex}>
                         {day ? (
                           <DayCell
                             date={day}
                             isVisited={hasVisit(visits, day)}
+                            isFuture={isFutureDate(day)}
                             size='sm'
                           />
                         ) : (
-                          <div className='w-[10px] h-[10px]' />
+                          <div className='w-3 h-3' />
                         )}
                       </div>
                     );
