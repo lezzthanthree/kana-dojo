@@ -164,7 +164,7 @@ export default function TranslatorPage({ locale = 'en' }: TranslatorPageProps) {
               disabled={
                 isLoading || isOffline || sourceText.trim().length === 0
               }
-              colorScheme='main'
+              gradient
               borderRadius='2xl'
               borderBottomThickness={6}
               className={cn(
