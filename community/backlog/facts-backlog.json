@@ -1677,12 +1677,12 @@
     "id": 280,
     "fact": "The phrase 'shinpuru' (シンプル) is the Japanese adoption of 'simple', often implying elegant minimalism.",
     "issued": false,
-    "completed": false
+    "completed": true
   },
   {
     "id": 281,
     "fact": "Japan has 'kominka' farmhouses that are renovated into cafes, inns, and galleries while keeping original beams and hearths.",
-    "issued": false,
+    "issued": true,
     "completed": false
   },
   {
